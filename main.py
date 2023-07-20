@@ -48,6 +48,22 @@ class DatabaseInterface(ABC):
     def clear_watchlist(self):
         pass
 
+    @abstractmethod
+    def get_all_catalogued(self) -> list[tuple[int, str, int]]:
+        pass
+
+    @abstractmethod
+    def insert_model(self, model: str, price: int):
+        pass
+
+    @abstractmethod
+    def delete_model(self, model: str):
+        pass
+
+    @abstractmethod
+    def clear_all_catalogued(self):
+        pass
+
 
 def extract_id_from_link(link: str) -> int:
     return int(link.split('/')[-1])
