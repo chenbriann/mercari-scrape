@@ -1,68 +1,60 @@
 import sys
-from abc import ABC, abstractmethod
+import re
+from sqlite_database import SQLiteHandler
+from database import DatabaseInterface
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.wait import WebDriverWait
 
 
-class MatchingInterface(ABC):
-    @abstractmethod
-    def search(self, title: str) -> str:
-        pass
-
-
-class DatabaseInterface(ABC):
-    @abstractmethod
-    def create_database(self):
-        pass
-
-    @abstractmethod
-    def get_all_listings(self) -> list[tuple[int, str, int]]:
-        pass
-
-    @abstractmethod
-    def insert_listing(self, id_num: int, model: str, price: int):
-        pass
-
-    @abstractmethod
-    def delete_listing(self, id_num: int):
-        pass
-
-    @abstractmethod
-    def clear_all_listings(self):
-        pass
-
-    @abstractmethod
-    def get_watchlist(self) -> list[tuple[int, str, int]]:
-        pass
-
-    @abstractmethod
-    def add_to_watchlist(self, id_num: int, model: str, price: int):
-        pass
-
-    @abstractmethod
-    def remove_from_watchlist(self, id_num: int):
-        pass
-
-    @abstractmethod
-    def clear_watchlist(self):
-        pass
-
-
 def extract_id_from_link(link: str) -> int:
-    return int(link.split('/')[-1])
+    """
+    Get the item id integer from link
+    :param link: item link
+    :return: item id
+    """
+    return int((link.split('/')[-1])[1:])
+
+
+def check_price_drop(id_num: int, new_price: int, db_handler: DatabaseInterface):
+    """
+    Check watched item for price change
+
+    :param id_num: item id
+    :param new_price: new item price
+    :param db_handler: old item price
+    :return: None
+    """
+    old_price = db_handler.search_watchlist(id_num)[2]
+    if old_price != new_price:
+        db_handler.update_watchlist_entry(id_num, new_price)
+        # TODO notify price change
+
+
+def match_keyword(item_name: str, db_handler: DatabaseInterface) -> str:
+    models_list = db_handler.get_all_from_table("catalog")
+
+    # remove whitespace and dashes
+    item_name_processed = (re.sub(r'[-\s]', '', item_name)).lower()
+    for model in models_list:
+
+        model_processed = (re.sub(r'[-\s]', '', model[0])).lower()
+
+        if model_processed in item_name_processed:
+            return model_processed
+    return "No Match"
 
 
 def main(link):
     # Initialize WebDriver
     driver = webdriver.Chrome()
 
-    # Initialize listing matcher
-    matcher = MatchingInterface()
+    # # Initialize listing matcher
+    # matcher = MatchingInterface()
 
     # Initialize database handler
-    db_handler = DatabaseInterface()
-    db_handler.create_database()
+    db_handler = SQLiteHandler()
+    db_handler.insert_model("DW-5600")
 
     # Get the filtered Mercari product page
     driver.get(link)
@@ -81,13 +73,21 @@ def main(link):
             lambda i: (i.find_element(By.CSS_SELECTOR, 'div a')).get_attribute('href'))
 
         # Search for keyword
-        item_model = matcher.search(item.text)
+        item_model = match_keyword(item_name, db_handler)
 
-        if item_model is not None:
+        if (item_model != "No Match") and ("shops" not in item_link):
+
+            item_id = extract_id_from_link(item_link)
+
             # cache listing
-            db_handler.insert_listing(item, item_model, item_price)
+            if db_handler.insert_listing(item_id, item_model, item_price):
+                # TODO handle notification and user response from telegram
+                print("new listing found")
 
-        # TODO handle notification and user response from telegram
+            # check watchlist for price drop
+            if db_handler.search_watchlist(item_id) is not None:
+                check_price_drop(item_id, item_price, db_handler)
+                # TODO send price drop notification
 
     # Close WebDriver
     driver.quit()
