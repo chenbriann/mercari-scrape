@@ -1,16 +1,10 @@
 import sys
+import re
 from sqlite_database import SQLiteHandler
 from database import DatabaseInterface
-from abc import ABC, abstractmethod
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.wait import WebDriverWait
-
-
-class MatchingInterface(ABC):
-    @abstractmethod
-    def search(self, title: str) -> str:
-        pass
 
 
 def extract_id_from_link(link: str) -> int:
@@ -37,6 +31,20 @@ def check_price_drop(id_num: int, new_price: int, db_handler: DatabaseInterface)
         # TODO notify price change
 
 
+def match_keyword(item_name: str, db_handler: DatabaseInterface) -> str:
+    models_list = db_handler.get_all_from_table("catalog")
+
+    # remove whitespace and dashes
+    item_name_processed = (re.sub(r'[-\s]', '', item_name)).lower()
+    for model in models_list:
+
+        model_processed = (re.sub(r'[-\s]', '', model[0])).lower()
+
+        if model_processed in item_name_processed:
+            return model_processed
+    return "No Match"
+
+
 def main(link):
     # Initialize WebDriver
     driver = webdriver.Chrome()
@@ -46,6 +54,7 @@ def main(link):
 
     # Initialize database handler
     db_handler = SQLiteHandler()
+    db_handler.insert_model("DW-5600")
 
     # Get the filtered Mercari product page
     driver.get(link)
@@ -63,12 +72,10 @@ def main(link):
         item_link = WebDriverWait(item, timeout=10).until(
             lambda i: (i.find_element(By.CSS_SELECTOR, 'div a')).get_attribute('href'))
 
-        # # Search for keyword
-        # item_model = matcher.search(item.text)
+        # Search for keyword
+        item_model = match_keyword(item_name, db_handler)
 
-        # TODO get item model
-        item_model = item_name
-        if (item_model is not None) and ("shops" not in item_link):
+        if (item_model != "No Match") and ("shops" not in item_link):
 
             item_id = extract_id_from_link(item_link)
 
