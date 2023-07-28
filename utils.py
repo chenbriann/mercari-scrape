@@ -15,6 +15,16 @@ def extract_id_from_link(link: str) -> int:
     return int((link.split('/')[-1])[1:])
 
 
+def split_text(text: str, chunk_size: int):
+    """
+    Split text into chunks
+    :param text:
+    :param chunk_size:
+    :return:
+    """
+    return [text[i:i + chunk_size] for i in range(0, len(text), chunk_size)]
+
+
 async def match_keyword(item_name: str, db_handler: DatabaseInterface) -> str:
     models_list = db_handler.get_all_from_table("catalog")
 
